@@ -1,16 +1,13 @@
 from faker import Faker
-from faker.providers import address, date_time, internet, passport, phone_number
-import uuid
+from faker.providers import address, date_time, internet, company, person
+import pandas as pd
 import random
-from td7.custom_types import Records
-import datetime
-import pandas as pd  
+from td7.schema import Schema
 
 # Inicializar Faker
 fake = Faker()
 fake.add_provider(address)
 fake.add_provider(date_time)
-fake.add_provider(internet)
 fake.add_provider(company)
 fake.add_provider(person)
 
@@ -18,96 +15,179 @@ fake.add_provider(person)
 file_path = 'td7/books.csv'
 books_df = pd.read_csv(file_path)
 
-# Función para generar datos para la tabla 'libros'
-def generate_libros_data(books_df, n):
-    libros = []
+# Función para generar datos para la tabla 'editoriales'
+def generate_editoriales(n):
+    editoriales = []
     for _ in range(n):
-        book = books_df.sample(1).iloc[0]
-        libro = {
+        editorial = {
+            "razon_social": fake.unique.company(),
+            "nombre": fake.company_suffix(),
+            "pais_origen": fake.country(),
+            "anio_fundacion": fake.year()
+        }
+        editoriales.append(editorial)
+    return editoriales
+
+# Función para generar datos para la tabla 'idiomas'
+def generate_idiomas(n):
+    idiomas = []
+    for _ in range(n):
+        idioma = {
+            "lang_code": fake.language_code(),
+            "nombre_completo": fake.language_name(),
+            "pais_origen": fake.country()
+        }
+        idiomas.append(idioma)
+    return idiomas
+
+def generate_autores(books_df, n):
+    autores = []
+    books = books_df.sample(n)
+    for book in books:
+        nombres, apellidos = book["authors"].split(' ', 1)
+        autor = {
+            "id_autor": fake.incremental_id(),
+            "nombres": nombres, 
+            "apellidos": apellidos,
+            "fecha_nac": fake.date_of_birth(minimum_age=25, maximum_age=70),
+            "nacionalidad": fake.country()   
+        }  
+        autores.append(autor)
+    return autores
+
+def generate_autores(books_df, start_row, end_row):
+    autores = []
+    books = books_df.iloc[start_row:end_row]
+    for book in books:
+        nombres, apellidos = book["authors"].split(' ', 1)
+        autor = {
+            "id_autor": fake.incremental_id(),
+            "nombres": nombres, 
+            "apellidos": apellidos,
+            "fecha_nac": fake.date_of_birth(minimum_age=25, maximum_age=70),
+            "nacionalidad": fake.country()   
+        }  
+        autores.append(autor)
+    return autores
+
+def generate_libro_escribio(idiomas, editoriales, n):
+    libros = []
+    escribio = []
+    generos=[]
+    books = books_df.sample(n)
+    for book in books:     # ¿Manejan el caso de que el libro ya exista en la base de datos con ese ISBN?
+        
+        libros.append({
             "ISBN": book["isbn13"],
             "titulo": book["title"],
             "nro_serie": random.randint(1, 10),
             "edicion": random.randint(1, 5),
-            "lang_code": fake.language_code(),
-            "editorial_razon": fake.company(),
-            "fecha_publicacion": fake.date_between(start_date="-50y", end_date="today")
-        }
-        libros.append(libro)
-    return libros
+            "lang_code": random.choice(idiomas)["lang_code"],
+            "editorial_razon": random.choice(editoriales)["razon_social"],
+            "fecha_publicacion": book["published_year"]
+        })
+        generos.append({
+                "ISBN": libros["ISBN"], #tengo que linkearlo al libro que corresponde
+                "genero": random.sample(["Ficción", "No Ficción", "Misterio", "Romance", "Ciencia Ficción", "Biografia"], random.randint(1, 3)) #o book["categories"] pero es raro el formato
+        })
+        
+        nombres, apellidos = book["authors"].split(' ', 1)
+        autor = Schema.get_autor(nombres, apellidos)
+        escribio.append({
+            "ISBN": book["isbn13"],
+            "id_autor": autor["id_autor"]
+        })
+    return libros, generos, escribio
+
+def generate_libro_escribio(books_df, idiomas, editoriales, start_row, end_row, schema):
+    libros = []
+    escribio = []
+    generos_libros = []
+    books = books_df.iloc[start_row:end_row]
+    for book in books:
+        if not schema.libro_existe(book["isbn13"]):
+            libro = {
+                "ISBN": book["isbn13"],
+                "titulo": book["title"],
+                "nro_serie": random.randint(1, 10),
+                "edicion": random.randint(1, 5),
+                "lang_code": random.choice(idiomas),
+                "editorial_razon": random.choice(editoriales),
+                "fecha_publicacion": book["published_year"]
+            }
+            libros.append(libro)
+    
+            generos = random.sample(["Ficción", "No Ficción", "Misterio", "Romance", "Ciencia Ficción", "Biografia"], random.randint(1, 3))
+            for genero in generos:
+                generos_libros.append({
+                    "ISBN": libro["ISBN"],
+                    "genero": genero
+                })
+    
+            nombres, apellidos = book["authors"].split(' ', 1)
+            autor = schema.get_autor(nombres, apellidos)
+            if autor:
+                escribio.append({
+                    "ISBN": book["isbn13"],
+                    "id_autor": autor["id_autor"]
+                })
+    
+    return libros, generos_libros, escribio
 
 # Generar datos para 'libros_fisicos'
-def generate_libros_fisicos(libros):
+def generate_libros_fisicos(libros): 
     libros_fisicos = []
+    #libros = #quedarte con los primeros n/2
     for libro in libros:
-        libro_fisico = {
-            "ISBN": libro["ISBN"],
+        libros_fisicos.append({
+            "ISBN": libro["isbn13"],
             "cant_copias": random.randint(1, 20)
-        }
-        libros_fisicos.append(libro_fisico)
+        })
     return libros_fisicos
 
 # Generar datos para 'libros_digitales'
 def generate_libros_digitales(libros):
     libros_digitales = []
+    #libros = #quedarte con los restantes n/2
     for libro in libros:
-        libro_digital = {
-            "ISBN": libro["ISBN"],
+        libros_digitales.append({
+            "ISBN": libro["isbn13"], #corregir: el libro fisico y digital tienen diferente ISBN aunque sean el mismo libro -> random.randint(1000000000000, 9999999999999)
             "link": fake.url()
-        }
-        libros_digitales.append(libro_digital)
+        })
     return libros_digitales
 
+#-> este esta bien hacer todo de una porque es todo fake y no se tiene que corresponder un narrador con un libro
 # Generar datos para 'audiolibros'
-def generate_audiolibros(libros):
+def generate_audiolibros_narrador(books_df,idiomas,n): #creo y narro ????
     audiolibros = []
-    for libro in libros:
-        audiolibro = {
-            "id_audiolibro": random.randint(1000, 9999),
-            "titulo": libro["titulo"],
-            "duracion": random.randint(60, 1200),  # duración en minutos
-            "nro_serie": libro["nro_serie"],
-            "lang_code": libro["lang_code"],
-            "fecha_publicacion": libro["fecha_publicacion"]
-        }
-        audiolibros.append(audiolibro)
-    return audiolibros
-
-# Generar datos para 'generos_libros'
-def generate_generos_libros(libros):
-    generos_libros = []
-    for libro in libros:
-        generos = random.sample(["Ficción", "No Ficción", "Misterio", "Romance", "Ciencia Ficción", "Biografia"], random.randint(1, 3))
-        for genero in generos:
-            generos_libro = {
-                "ISBN": libro["ISBN"],
-                "genero": genero
-            }
-            generos_libros.append(generos_libro)
-    return generos_libros
-
-# Generar datos para 'generos_audiolibros'
-def generate_generos_audiolibros(audiolibros):
+    narradores = []
     generos_audiolibros = []
-    for audiolibro in audiolibros:
-        generos = random.sample(["Ficción", "No Ficción", "Misterio", "Romance", "Ciencia Ficción", "Biografia"], random.randint(1, 3))
-        for genero in generos:
-            generos_audiolibro = {
+    for _ in range(n):
+        book = books_df.sample(1).iloc[0]
+        audiolibro = {
+            "id_audiolibro": fake.unique.random_int(1000, 9999),
+            "titulo": book["title"],
+            "duracion": random.randint(60, 1200),  # duración en minutos
+            "nro_serie": random.randint(1, 10),
+            "lang_code": random.choice(idiomas)["lang_code"],
+            "fecha_publicacion": book["published_year"] #fake.date_between(start_date="-50y", end_date="-1y")
+        }
+        narrador = {
+            "id_narrador": random.randint(1000, 9999), #fijarse, un autor puede narrar su propio libro
+            "nombres": fake.first_name(),
+            "apellidos": fake.last_name(),
+            "fecha_nac": fake.date_of_birth(minimum_age=25, maximum_age=70),
+            "nacionalidad": fake.country() 
+        }
+        generos_audiolibro = {
                 "id_audiolibro": audiolibro["id_audiolibro"],
-                "genero": genero
+                "generos": random.sample(["Ficción", "No Ficción", "Misterio", "Romance", "Ciencia Ficción", "Biografia"], random.randint(1, 3))
             }
-            generos_audiolibros.append(generos_audiolibro)
-    return generos_audiolibros
+        narradores.append(narrador)
+        audiolibros.append(audiolibro)
+        generos_audiolibros(generos_audiolibro)
+    return audiolibros, narradores, generos_audiolibros
 
-# Generar datos para 'escribio' y 'creo'
-def generate_escribio(libros, autores):
-    escribio = []
-    for libro in libros:
-        autor = random.choice(autores)
-        escribio.append({
-            "ISBN": libro["ISBN"],
-            "id_autor": autor["id_autor"]
-        })
-    return escribio
 
 def generate_creo(audiolibros, autores):
     creo = []
@@ -115,7 +195,7 @@ def generate_creo(audiolibros, autores):
         autor = random.choice(autores)
         creo.append({
             "id_audiolibro": audiolibro["id_audiolibro"],
-            "id_autor": autor["id_autor"]
+            "id_autor": autor["id_autor"]#tengo que linkearlo al libro que corresponde
         })
     return creo
 
@@ -126,7 +206,7 @@ def generate_narro(audiolibros, narradores):
         narrador = random.choice(narradores)
         narro.append({
             "id_audiolibro": audiolibro["id_audiolibro"],
-            "id_narrador": narrador["id_narrador"]
+            "id_narrador": narrador["id_narrador"]#tengo que linkearlo al libro que corresponde
         })
     return narro
 
@@ -148,6 +228,7 @@ def generate_ejemplares(libros_fisicos):
 # Generar datos para 'usuarios'
 def generate_usuarios(n):
     usuarios = []
+    telefono_usuarios = []
     for _ in range(n):
         usuario = {
             "DNI": fake.unique.random_int(min=10000000, max=99999999),
@@ -156,20 +237,14 @@ def generate_usuarios(n):
             "direccion": fake.address(),
             "email": fake.email()
         }
-        usuarios.append(usuario)
-    return usuarios
-
-# Generar datos para 'telefonos_usuarios'
-def generate_telefonos_usuarios(usuarios):
-    telefonos_usuarios = []
-    for usuario in usuarios:
-        for _ in range(random.randint(1, 3)):
-            telefono_usuario = {
+        telefono_usuario = {
                 "DNI": usuario["DNI"],
                 "telefono": fake.unique.random_int(min=600000000, max=699999999)
             }
-            telefonos_usuarios.append(telefono_usuario)
-    return telefonos_usuarios
+        usuarios.append(usuario)
+        telefono_usuarios(telefono_usuario)
+    return usuarios, telefono_usuario
+
 
 # Generar datos para 'prestamos'
 def generate_prestamos(ejemplares, usuarios, n):
@@ -177,13 +252,13 @@ def generate_prestamos(ejemplares, usuarios, n):
     for _ in range(n):
         ejemplar = random.choice(ejemplares)
         usuario = random.choice(usuarios)
-        fecha_inicio = fake.date_time_this_decade()
-        fecha_devolucion = fake.date_time_between(start_date=fecha_inicio) if random.random() > 0.5 else None ## ???
+        fecha_inicio = fake.date_time_this_year()
+        fecha_devolucion = fake.date_time_between(start_date=fecha_inicio) if random.random() > 0.5 else None  #asi algunos prestamos son null
         prestamo = {
             "id_ejemplar": ejemplar["id_ejemplar"],
             "DNI": usuario["DNI"],
             "fecha_inicio": fecha_inicio,
-            "fecha_devolucion": fecha_devolucion,
+            "fecha_devolucion": fecha_devolucion, 
             "nro_renovacion": random.randint(0, 3)
         }
         prestamos.append(prestamo)
@@ -205,9 +280,9 @@ def generate_reservas(libros_fisicos, usuarios, n):
 
 # Generar 5 registros de ejemplo para todas las tablas
 example_libros = generate_libros_data(books_df, 5)
-example_libros_fisicos = generate_libros_fisicos(example_libros)
-example_libros_digitales = generate_libros_digitales(example_libros)
-example_audiolibros = generate_audiolibros(example_libros)
+example_libros_fisicos = generate_libros_fisicos(books_df, 5)
+example_libros_digitales = generate_libros_digitales(books_df, 5)
+example_audiolibros = generate_audiolibros(books_df, 5)
 example_generos_libros = generate_generos_libros(example_libros)
 example_generos_audiolibros = generate_generos_audiolibros(example_audiolibros)
 
