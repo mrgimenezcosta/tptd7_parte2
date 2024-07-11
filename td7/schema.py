@@ -37,6 +37,16 @@ class Schema:
         else:
             return None
 
+    def get_max_id_autor(self):
+        query = """
+        SELECT MAX(id_autor) AS max_id 
+        FROM autores
+        """
+        result = self.execute_query(query)
+        if result and result[0]['max_id'] is not None:
+            return result[0]['max_id']
+        else:
+            return None
 
     def get_narradores(self, sample_n: Optional[int] = None) -> Records:
         query = "SELECT * FROM narradores"

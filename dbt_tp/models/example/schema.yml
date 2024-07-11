@@ -1,20 +1,151 @@
 version: 2
 
-models:
-  - name: my_first_dbt_model
-    description: "A starter dbt model"
-    columns:
-      - name: id
-        description: "The primary key for this table"
-        data_tests:
-          - unique
-          - not_null
+sources:
+  - name: biblioteca
+    database: my_database
+    schema: public
+    tables:
+      - name: libros_fisicos
+        description: "Información sobre los libros físicos disponibles en la biblioteca."
+      - name: prestamos
+        description: "Registros de préstamos de libros."
+      - name: ejemplares
+        description: "Detalles de los ejemplares de libros."
+      - name: libros
+        description: "Información general de los libros."
+      - name: usuarios
+        description: "Detalles de los usuarios de la biblioteca."
+      - name: reservas
+        description: "Registros de reservas de libros."
 
-  - name: my_second_dbt_model
-    description: "A starter dbt model"
+models:
+  - name: copias_disponibles
+    description: "Modelo que proporciona datos sobre las copias disponibles en la biblioteca."
     columns:
-      - name: id
-        description: "The primary key for this table"
-        data_tests:
+      - name: ISBN
+        description: "ISBN del libro."
+        tests:
           - unique
           - not_null
+          - valid_isbn_13: {column_name: 'ISBN'}
+          - relationships:
+              to: ref('libros_fisicos')
+              field: ISBN
+      - name: copias_disponibles
+        description: "Número de copias disponibles del libro."
+        tests:
+          - not_null
+          - mayor_o_igual_cero: {column_name: 'copias_disponibles'}
+    sources:
+      - name: biblioteca
+        tables:
+          - name: libros_fisicos
+    refs:
+      - name: libros_prestados
+
+  - name: deudores
+    description: "Modelo que proporciona datos sobre los deudores de la biblioteca."
+    columns:
+      - name: DNI
+        description: "Identificador único del usuario."
+        tests:
+          - not_null
+          - valid_dni: {column_name: 'DNI'}
+          - relationships:
+              to: ref('usuarios')
+              field: DNI
+      - name: libro_prestado
+        description: "Título del libro prestado."
+        tests:
+          - not_null
+          - relationships:
+              to: ref('libros_fisicos')
+              field: titulo
+      - name: correo_usuario
+        description: "Correo electrónico del usuario."
+        tests:
+          - not_null
+          - valid_email: {column_name: 'correo_usuario'}
+          - relationships:
+              to: ref('usuarios')
+              field: email
+      - name: dias_deuda
+        description: "Cantidad de días de deuda."
+        tests:
+          - not_null
+          - mayor_o_igual_uno: {column_name: 'dias_deuda'}
+          
+    sources:
+      - name: biblioteca
+        tables:
+          - name: prestamos
+          - name: ejemplares
+          - name: libros_fisicos
+          - name: libros
+          - name: usuarios
+
+  - name: libros_prestados
+    description: "Modelo que proporciona datos sobre los libros prestados."
+    columns:
+      - name: ISBN
+        description: "ISBN del libro."
+        tests:
+          - unique
+          - not_null
+          - valid_isbn_13: {column_name: 'ISBN'}
+          - relationships:
+              to: ref('libros_fisicos')
+              field: ISBN
+      - name: cantidad_prestamos
+        description: "Número de veces que el libro ha sido prestado."
+        tests:
+          - not_null
+          - mayor_o_igual_cero: {column_name: 'cantidad_prestamos'}
+    sources:
+      - name: biblioteca
+        tables:
+          - name: prestamos
+
+  - name: reservas_activas
+    description: "Modelo que proporciona datos sobre las reservas activas de libros."
+    columns:
+      - name: ISBN
+        description: "ISBN del libro reservado."
+        tests:
+          - unique
+          - not_null
+          - valid_isbn_13: {column_name: 'ISBN'}
+          - relationships:
+              to: ref('libros_fisicos')
+              field: ISBN
+      - name: cantidad_reservas
+        description: "Número de reservas activas del libro."
+        tests:
+          - not_null
+          - mayor_o_igual_cero: {column_name: 'cantidad_reservas'}
+    sources:
+      - name: biblioteca
+        tables:
+          - name: reservas
+
+  - name: reservas_insatisfechas
+    description: "Modelo que proporciona datos sobre las reservas insatisfechas."
+    columns:
+      - name: ISBN
+        description: "ISBN del libro solicitado."
+        tests:
+          - unique
+          - not_null
+          - valid_isbn_13: {column_name: 'ISBN'}
+          - relationships:
+              to: ref('libros_fisicos')
+              field: ISBN
+      - name: cant_reservas_insatisfechas
+        description: "Cantidad de reservas insatisfechas del libro."
+        tests:
+          - not_null
+          - mayor_a_cero: {column_name: 'cant_reservas_insatisfechas'}
+
+    refs:
+      - name: reservas_activas
+      - name: copias_disponibles

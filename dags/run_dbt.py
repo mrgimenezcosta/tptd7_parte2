@@ -14,7 +14,6 @@ from cosmos.airflow.task_group import DbtTaskGroup
 from cosmos.constants import TestBehavior
 from cosmos.operators import DbtDocsOperator
 from cosmos.profiles import PostgresUserPasswordProfileMapping
-from airflow.operators.python import PythonOperator, BranchPythonOperator
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -48,102 +47,11 @@ def copy_docs(project_dir: str):
 with DAG(
     "run_dbt",
     default_args=DEFAULT_ARGS,
-    schedule=None,  #TODO: complete aquí con lo que considere
+    schedule=None,  # TODO: complete aquí con lo que considere
     catchup=False,
     max_active_runs=1,
     tags=["dbt"],
-):  
-    l1 = PythonOperator(
-        task_id="extract_ISBN",
-        python_callable=step.extract_isbn_factura,
-        provide_context=True,
-        op_kwargs={},
-    )
-
-    l2 = PythonOperator(
-        task_id="obtain_data",
-        python_callable=step.get_book_data,
-        provide_context=True,
-        op_kwargs={},
-    )
-
-    l3 = PythonOperator(
-        task_id="cargar_stock",
-        python_callable=step.update_book_table,
-        provide_context=True,
-        op_kwargs={},
-    )
-
-    l4 = PythonOperator(
-        task_id="contar_ejemplares",
-        python_callable=step.count_total_copies,
-        provide_context=True,
-        op_kwargs={},
-    )
-    
-    p1 = PythonOperator(
-        task_id="obtener_prestamos_activos",
-        python_callable=step.get_active_loans,
-        provide_context=True,
-        op_kwargs={},
-    )
-    
-    l1 >> l2 >> l3 >> [l4,p1]
-
-    pl1 = PythonOperator(
-        task_id="obtener_ejemplares_disponibles",
-        python_callable= step.get_available_copies,
-        provide_context=True,
-        op_kwargs={},
-    )
-
-    p1 >> pl1
-    l4 >> pl1
-
-    pl2 = PythonOperator(
-        task_id="actualizar_disponibilidad",
-        python_callable=step.update_availability,
-        provide_context=True,
-        op_kwargs={},
-    )
-
-    pl1 >> pl2
-
-    p1_2 = PythonOperator(
-        task_id="obtener_prestamos_vencidos",
-        python_callable=step.get_overdue_loans,
-        provide_context=True,
-        op_kwargs={},
-    )   
-    
-    p1 >> p1_2
-
-    p2 = PythonOperator(
-        task_id="calcular_multa",
-        python_callable=step.get_fine,
-        provide_context=True,
-        op_kwargs={},
-    ) 
-
-    u1 = PythonOperator(
-        task_id="extraer_mail_usuario",
-        python_callable=step.extract_user_mail,
-        provide_context=True,
-        op_kwargs={},
-    ) 
-    
-    p1_2 >> [p2, u1]
-
-    pu1 = PythonOperator(
-        task_id="actualizar_tabla_deudores",
-        python_callable=step.update_debtors_table,
-        provide_context=True,
-        op_kwargs={},
-    ) 
-
-    p2 >> pu1
-    u1 >> pu1
-
+):
     project_config = ProjectConfig(
         dbt_project_path=DBT_ROOT_PATH,
         project_name=DBT_PROJECT_NAME,
@@ -169,7 +77,7 @@ with DAG(
     )
 
     generate_dbt_docs = DbtDocsOperator(
-        task_id="generatl DAG debe incluir al menos cuatro nodose_dbt_docs",
+        task_id="generate_dbt_docs",
         project_dir=project_config.dbt_project_path,
         profile_config=profile_config,
         callback=copy_docs,
