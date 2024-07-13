@@ -1,4 +1,4 @@
 select *
-from {{ ref('model_name') }}
-where length({{ column_name }}) != 13
-or {{ column_name }} not like '978%'
+from {{ ref('libros_prestados') }}
+where length(isbn) != 13
+or isbn not like '978%'
