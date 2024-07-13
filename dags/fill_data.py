@@ -1,16 +1,32 @@
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.operators.python import BranchPythonOperator
+from airflow.operators.empty import EmptyOperator
 import pendulum
 import pandas as pd
 import datetime
+from datetime import datetime
 from td7.data_generator import DataGenerator
 from td7.schema import Schema
+import json 
 
-EVENTS_PER_DAY = 10_000
+lote = 30
 
 file_path = 'td7/books.csv'
-books_df = pd.read_csv(file_path) #no entiendo, esta importado generator
+books_df = pd.read_csv(file_path) 
+with open('td7/languages.json', 'r') as file:
+    languages = json.load(file)
+
+def calcular_rango(base_time: str):
+    """
+    Calcula el rango de filas (start, end) basado en la fecha y el número de filas por lote.
+    """
+    base_dt = pendulum.parse(base_time)
+    logica_dt = pendulum.datetime(2024, 6, 1)
+    meses_desde_inicio = (base_dt - logica_dt).months
+    start = meses_desde_inicio * lote
+    end = start + lote
+    return start, end
 
 def obtener_idiomas_editoriales(base_time: str, n: int, m:int):
     """Generates synth data and saves to DB.
@@ -31,52 +47,66 @@ def obtener_idiomas_editoriales(base_time: str, n: int, m:int):
     schema.insert(editoriales, "editoriales")
 
 def obtener_autores(base_time: str):
+    start, end = calcular_rango(base_time)
     generator = DataGenerator()
     schema = Schema()
-    autores = generator.generate_autores()
+    autores = generator.generate_autores(start, end)
     schema.insert(autores, "autores")
     
-def obtener_libros_escribio(base_time: str, n: int, z : int, m:int) :
+def obtener_libros_escribio(base_time: str, z : int, m:int) :
+    start, end = calcular_rango(base_time)
     generator = DataGenerator()
     schema = Schema()
     idiomas_sample = schema.get_idiomas(z)
     editoriales_sample = schema.get_editoriales(m)
     libros, generos_libros, escribio = generator.generate_libros(
-        idiomas_sample, #tenia parametros de más 
+        idiomas_sample, 
         editoriales_sample,
-        n
+        start,
+        end
     )
     schema.insert(libros, "libros")
     schema.insert(generos_libros, "generos_libros")
     schema.insert(escribio, "escribio")
 
-def obtener_fisicos_y_digitales(base_time:str, libros): ## LIBROS DEL ESQUEMA !!!
+def obtener_fisicos_y_digitales(base_time:str): ## LIBROS DEL ESQUEMA !!!
     #los libros deberia buscarlos en el schema, pero solo los que se acaban de cargar (lote)
+    start, end = calcular_rango(base_time)
     generator = DataGenerator()
     schema = Schema()
-    fisicos, digitales = generator.generate_libros_fyd(libros)
+    fisicos, digitales = generator.generate_libros_fyd(start, end)
     schema.insert(fisicos, "libros_fisicos"),
     schema.insert(digitales, "libros_digitales")    
 
-def obtener_audiolibros(base_time:str, n:int, z:int):
+def obtener_audiolibros(base_time:str, z:int):
+    start, end = calcular_rango(base_time)
     generator = DataGenerator()
     schema = Schema()
     idiomas_sample = schema.get_idiomas(z)
-    audiolibros = generator.generate_audiolibros(
+    audiolibros, narradores, generos_audiolibros, narro, creo = generator.generate_audiolibros(
         idiomas_sample,
-        n)
+        start,
+        end)
     schema.insert(audiolibros, "audiolibros")
+    schema.insert(narradores, "narradores")
+    schema.insert(generos_audiolibros, "generos_audiolibros")
+    schema.insert(narro, "narro")
+    schema.insert(creo, "creo")
+
+
 
 def obtener_usuarios(base_time:str, n:int):
     generator = DataGenerator()
     schema = Schema()
-    usuarios = generator.generate_usuarios(n)
+    usuarios, telefonos = generator.generate_usuarios(n)
     schema.insert(usuarios, "usuarios")
+    schema.insert(telefonos, "telefonos_usuarios")
 
-def obtener_ejemplares(base_time:str, n:int, libros_fisicos): ## LIBROS DEL ESQUEMA !!!
+def obtener_ejemplares(base_time:str): ## LIBROS DEL ESQUEMA !!!
+    start, end = calcular_rango(base_time)
     generator = DataGenerator()
     schema = Schema()
-    ejemplares = generator.generate_ejemplares(libros_fisicos, n)
+    ejemplares = generator.generate_ejemplares(start, end)
     schema.insert(ejemplares, "ejemplares")
 
 def obtener_reservas(base_time:str, n:int, f:int, u:int):
@@ -102,11 +132,9 @@ def obtener_prestamos(base_time:str, n:int, e:int, u:int):
 def es_principio_de_mes(base_time:str):
     base_time = datetime.strptime(base_time, '%Y-%m-%d')
     if base_time.day == 1:
-        return ['autores','usuarios']
+        return 'autores'
     else: #cambiar que sea siempre (incluyendo primero de mes)
-        'usuarios'
-
-
+        return 'nada_de_nada'
 
 #---------------------DAGs-----------------------
 
@@ -141,6 +169,9 @@ with DAG(
     branch_task = BranchPythonOperator(
         task_id='branch-task',
         python_callable=es_principio_de_mes,
+        op_kwargs={
+        "base_time": "{{ ds }}"  # Pasa el argumento 'base_time'
+        },
         dag=dag,
 )
     
@@ -152,41 +183,45 @@ with DAG(
             "base_time": "{{ ds }}",  
         },
     )
+
     task_libros = PythonOperator(
         task_id="libros",
         python_callable=obtener_libros_escribio, #como tiene el 1/6 y catchup true deberia ejecutarse 2 veces
         op_kwargs={
             "base_time": "{{ ds }}",  
-            "n": 3000,  #libros
             "z": 5,    #idiomas
             "m": 5 #editoriales
         },
     )
+
     task_libros_fyd = PythonOperator(
         task_id="libros-fyd",
         python_callable=obtener_fisicos_y_digitales, 
         op_kwargs={
             "base_time": "{{ ds }}",  
-            #"libros":  # PENSAR COMO SACAR DEL ESQUEMA !
         },
     )
+
     task_ejemplares = PythonOperator(
         task_id="ejemplares",
         python_callable=obtener_ejemplares, 
         op_kwargs={
-            "base_time": "{{ ds }}",  
-            "n": 10000
-            #"libros":  # PENSAR COMO SACAR DEL ESQUEMA !
+            "base_time": "{{ ds }}"
         },
     )
+
     task_audiolibros = PythonOperator (
         task_id="audiolibros",
         python_callable=obtener_audiolibros, 
         op_kwargs={
-            "base_time": "{{ ds }}",  
-            "n": 500,  #libros
+            "base_time": "{{ ds }}",
             "z": 3,    #idiomas
         },
+    )
+
+#----nodo vacio ----
+    task_vacia = EmptyOperator (
+        task_id="nada_de_nada"  
     )
 
 #----rama diaria----
@@ -196,7 +231,8 @@ with DAG(
         op_kwargs={
             "base_time": "{{ ds }}",  
             "n": 5,  #numero?? depende de la cadencia
-        },  
+        }, 
+        trigger_rule="one_success" 
     )
 
 #----dependencias----
@@ -221,13 +257,15 @@ with DAG(
             "e": 200,
             "u": 150,
         },  
-        trigger_rule="one_success"
+
     )
 
-branch_task >> [task_autores, task_usuarios]
+branch_task >> [task_autores, task_vacia]
 
-task_autores >> task_libros >> task_libros_fyd >> task_ejemplares
+task_autores >> task_libros >> task_libros_fyd >> task_ejemplares >> task_usuarios
+task_vacia >> task_usuarios
+
 task_autores >> task_audiolibros
 
-[task_usuarios, task_libros_fyd] >> task_reservas
-[task_usuarios, task_ejemplares] >> task_prestamos
+task_usuarios >> task_reservas
+task_usuarios >> task_prestamos

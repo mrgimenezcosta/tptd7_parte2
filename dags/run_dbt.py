@@ -28,7 +28,7 @@ DEFAULT_ARGS = {
     "depends_on_past": False,
     "start_date": datetime(2024, 6, 3),
     "retries": 1,
-    "retry_delay": timedelta(minutes=15),
+    "retry_delay": timedelta(minutes=2),
 }
 
 

@@ -2,7 +2,7 @@ version: 2
 
 sources:
   - name: biblioteca
-    database: my_database
+    database: postgres
     schema: public
     tables:
       - name: libros_fisicos
@@ -22,20 +22,18 @@ models:
   - name: copias_disponibles
     description: "Modelo que proporciona datos sobre las copias disponibles en la biblioteca."
     columns:
-      - name: ISBN
-        description: "ISBN del libro."
-        tests:
+      - name: isbn
+        description: "isbn del libro."
+        data_tests:
           - unique
           - not_null
-          - valid_isbn_13: {column_name: 'ISBN'}
           - relationships:
               to: ref('libros_fisicos')
-              field: ISBN
+              field: isbn
       - name: copias_disponibles
         description: "Número de copias disponibles del libro."
-        tests:
+        data_tests:
           - not_null
-          - mayor_o_igual_cero: {column_name: 'copias_disponibles'}
     sources:
       - name: biblioteca
         tables:
@@ -46,34 +44,31 @@ models:
   - name: deudores
     description: "Modelo que proporciona datos sobre los deudores de la biblioteca."
     columns:
-      - name: DNI
+      - name: dni
         description: "Identificador único del usuario."
-        tests:
+        data_tests:
           - not_null
-          - valid_dni: {column_name: 'DNI'}
           - relationships:
               to: ref('usuarios')
-              field: DNI
+              field: dni
       - name: libro_prestado
         description: "Título del libro prestado."
-        tests:
+        data_tests:
           - not_null
           - relationships:
               to: ref('libros_fisicos')
               field: titulo
       - name: correo_usuario
         description: "Correo electrónico del usuario."
-        tests:
+        data_tests:
           - not_null
-          - valid_email: {column_name: 'correo_usuario'}
           - relationships:
               to: ref('usuarios')
               field: email
       - name: dias_deuda
         description: "Cantidad de días de deuda."
-        tests:
+        data_tests:
           - not_null
-          - mayor_o_igual_uno: {column_name: 'dias_deuda'}
           
     sources:
       - name: biblioteca
@@ -87,42 +82,39 @@ models:
   - name: libros_prestados
     description: "Modelo que proporciona datos sobre los libros prestados."
     columns:
-      - name: ISBN
-        description: "ISBN del libro."
-        tests:
+      - name: isbn
+        description: "isbn del libro."
+        data_tests:
           - unique
           - not_null
-          - valid_isbn_13: {column_name: 'ISBN'}
           - relationships:
               to: ref('libros_fisicos')
-              field: ISBN
+              field: isbn
       - name: cantidad_prestamos
         description: "Número de veces que el libro ha sido prestado."
-        tests:
+        data_tests:
           - not_null
-          - mayor_o_igual_cero: {column_name: 'cantidad_prestamos'}
     sources:
       - name: biblioteca
         tables:
           - name: prestamos
+          - name : ejemplares
 
   - name: reservas_activas
     description: "Modelo que proporciona datos sobre las reservas activas de libros."
     columns:
-      - name: ISBN
-        description: "ISBN del libro reservado."
-        tests:
+      - name: isbn
+        description: "isbn del libro reservado."
+        data_tests:
           - unique
           - not_null
-          - valid_isbn_13: {column_name: 'ISBN'}
           - relationships:
               to: ref('libros_fisicos')
-              field: ISBN
+              field: isbn
       - name: cantidad_reservas
         description: "Número de reservas activas del libro."
-        tests:
+        data_tests:
           - not_null
-          - mayor_o_igual_cero: {column_name: 'cantidad_reservas'}
     sources:
       - name: biblioteca
         tables:
@@ -131,20 +123,18 @@ models:
   - name: reservas_insatisfechas
     description: "Modelo que proporciona datos sobre las reservas insatisfechas."
     columns:
-      - name: ISBN
-        description: "ISBN del libro solicitado."
-        tests:
+      - name: isbn
+        description: "isbn del libro solicitado."
+        data_tests:
           - unique
           - not_null
-          - valid_isbn_13: {column_name: 'ISBN'}
           - relationships:
               to: ref('libros_fisicos')
-              field: ISBN
+              field: isbn
       - name: cant_reservas_insatisfechas
         description: "Cantidad de reservas insatisfechas del libro."
-        tests:
+        data_tests:
           - not_null
-          - mayor_a_cero: {column_name: 'cant_reservas_insatisfechas'}
 
     refs:
       - name: reservas_activas

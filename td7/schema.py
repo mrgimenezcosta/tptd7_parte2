@@ -23,17 +23,16 @@ class Schema:
         editoriales = [record['razon_social'] for record in records]
         return editoriales
     
-    def get_autor(self, nombres: str, apellidos: str) -> Optional[Dict[str, Any]]:
-        query = """
+    def get_autor(self, nombres: str, apellidos: str):
+        query = f"""
         SELECT id_autor 
         FROM autores
-        WHERE nombres = %s AND apellidos = %s
+        WHERE nombres = '{nombres}' AND apellidos = '{apellidos}'
         """
-        params = (nombres, apellidos)
-        result = self.db.run_select(query, params)
+        result = self.db.run_select(query)
         
         if result:
-            return result[0]
+            return result[0]["id_autor"] 
         else:
             return None
 
@@ -42,7 +41,7 @@ class Schema:
         SELECT MAX(id_autor) AS max_id 
         FROM autores
         """
-        result = self.execute_query(query)
+        result = self.db.run_select(query)
         if result and result[0]['max_id'] is not None:
             return result[0]['max_id']
         else:
@@ -54,16 +53,19 @@ class Schema:
             query += f" LIMIT {sample_n}"
         return self.db.run_select(query)
 
-    def get_libros(self, sample_n: Optional[int] = None) -> Records:
+    def get_libros(self, start, end) -> Records:
         query = "SELECT * FROM libros"
-        if sample_n is not None:
-            query += f" LIMIT {sample_n}"
+        query += f" LIMIT {end}"
+        query += f" OFFSET {start}"
         return self.db.run_select(query)
 
-    def get_libros_fisicos(self, sample_n: Optional[int] = None) -> Records:
+    def get_libros_fisicos(self, sample_n: Optional[int] = None, start: Optional[int] = None, end: Optional[int] = None) -> Records:
         query = "SELECT * FROM libros_fisicos"
         if sample_n is not None:
             query += f" LIMIT {sample_n}"
+        if start is not None and end is not None:
+            query += f" LIMIT {end}"
+            query += f" OFFSET {start}"
         return self.db.run_select(query)
 
     def get_libros_digitales(self, sample_n: Optional[int] = None) -> Records:
@@ -90,11 +92,14 @@ class Schema:
             query += f" LIMIT {sample_n}"
         return self.db.run_select(query)
 
-    def get_escribio(self, sample_n: Optional[int] = None) -> Records:
-        query = "SELECT * FROM escribio"
+        
+    def get_escribio(self, isbn, sample_n: Optional[int] = None) ->  List[int]:
+        query = f"SELECT id_autor FROM escribio WHERE isbn='{isbn}'"
         if sample_n is not None:
             query += f" LIMIT {sample_n}"
-        return self.db.run_select(query)
+        records =  self.db.run_select(query)
+        ids = [record['id_autor'] for record in records]
+        return ids
 
     def get_creo(self, sample_n: Optional[int] = None) -> Records:
         query = "SELECT * FROM creo"
@@ -113,6 +118,17 @@ class Schema:
         if sample_n is not None:
             query += f" LIMIT {sample_n}"
         return self.db.run_select(query)
+    
+    def get_max_id_ejemplar(self):
+        query = """
+        SELECT MAX(id_ejemplar) AS max_id 
+        FROM ejemplares
+        """
+        result = self.db.run_select(query)
+        if result and result[0]['max_id'] is not None:
+            return result[0]['max_id']
+        else:
+            return None
 
     def get_usuarios(self, sample_n: Optional[int] = None) -> Records:
         query = "SELECT * FROM usuarios"

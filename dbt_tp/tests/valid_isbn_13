@@ -1,0 +1,4 @@
+select *
+from {{ ref('model_name') }}
+where length({{ column_name }}) != 13
+or {{ column_name }} not like '978%'

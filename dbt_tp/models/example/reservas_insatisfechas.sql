@@ -1,33 +1,25 @@
 -- models/reservas_insatisfechas.sql
 {{ config(materialized='table') }}
 
-with reservas_activas as (
-    {{ ref('reservas_activas') }}
-),
-
-libros_fisicos_disponibles as (
-    {{ ref('copias_disponibles') }}
-),
-
-reservas_insatisfechas as (
+with reservas_insatisfechas as (
     select
-        lfd.ISBN,
+        lfd.isbn,
         ra.cantidad_reservas,
-        (ra.cantidad_reservas - lfd.copias_disponibles) as reservas_insatisfechas
+        (ra.cantidad_reservas - lfd.copias_disponibles) as cant_reservas_insatisfechas
     from
-        libros_fisicos_disponibles as lfd
+        {{ ref('copias_disponibles') }} as lfd
     join
-        reservas_activas as ra
+        {{ ref('reservas_activas') }} as ra
     on
-        lfd.ISBN = ra.ISBN
+        lfd.isbn = ra.isbn
     where
         ra.cantidad_reservas > lfd.copias_disponibles --si fuera < se podria satisfacer seguro
 )
 
 select
-    ISBN,
+    isbn,
     cant_reservas_insatisfechas
 from
     reservas_insatisfechas
 where
-    cant_reservas_insatisfechas > 0;
+    cant_reservas_insatisfechas > 0
